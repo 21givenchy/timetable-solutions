@@ -1,0 +1,161 @@
+<!--
+A table showing the related objects for some model
+------------------
+Context variables:
+------------------
+related_name: str
+related_table_url: str
+page_obj: django_paginator.Page, which has object_list: list[OrderedDict]
+paginator: django_paginate.Paginator
+-->
+
+{% load form_tags %}
+
+<div
+    id="{{ related_name }}-card"
+    class="card p-2 my-3 col-12"
+>
+    <div class="card-header p-1">
+        <h5>
+            {{ related_model_name|title }}
+        </h5>
+    </div>
+
+    <!-- Single dropdown form used to add related model instances -->
+    {% if add_form %}
+        <form
+            hx-post="{{ related_table_url }}"
+            hx-target="#{{ related_name }}-card"
+            hx-swap="outerHTML"
+            id="{{ related_name }}-add-form"
+            class="p-1"
+        >
+            {% csrf_token %}
+            {% include 'utils/forms/non-field-errors.html' with form=form %}
+
+            <!--This should just be a single multi-select field-->
+            {% for field in form %}
+                <fieldset {% if field.field.disabled %}disabled{% endif %}>
+                    {% include 'utils/forms/form-field.html' with field=field only %}
+                </fieldset>
+            {% endfor %}
+
+            <button type="submit" name="add-{{ related_name }}" class="btn btn-success m-1">
+                <i class="fa-solid fa-plus-circle"></i>
+                Add
+            </button>
+        </form>
+    {% endif %}
+
+
+    <!-- The list display table showing all related model instances -->
+    <div class="table-responsive">
+        <table class="table table-striped table-hover w-100 text-nowrap">
+            <thead>
+                <tr>
+                    {% for field_name in displayed_fields.values %}
+                        <th>{{ field_name }}</th>
+                    {% endfor %}
+                    <th class="w-25 text-center"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for serialized_model_instance in page_obj.object_list %}
+                    <tr>
+                        {% for field_name, field_value in serialized_model_instance.items %}
+                            {% if field_name in displayed_fields %}
+                                <td class="align-middle">
+                                    {{ field_value }}
+                                </td>
+                            {% endif %}
+                        {% endfor %}
+                        <td class="d-flex flex-row justify-content-evenly py-1">
+                            <a href="{{ serialized_model_instance.update_url }}" class="btn btn-secondary py-1">
+                                <i class="fa-solid fa-eye"></i>
+                                View
+                            </a>
+
+                            <!-- Include a form for removing this related model instance -->
+                            <!-- Note there are no fields on the form so the values are set directly -->
+                            <form
+                                hx-delete="{{ related_table_url }}"
+                                hx-target="#{{ related_name }}-card"
+                                hx-swap="outerHTML"
+                                id="{{ related_name }}-remove-form-{% get_object_id serialized_model_instance %}"
+                            >
+                                <!-- Htmx requests receive their csrf token from the body tag -->
+                                <input
+                                    type="hidden"
+                                    name="related-object-id"
+                                    value={% get_object_id serialized_model_instance %}
+                                >
+                                <button
+                                    type="submit"
+                                    name="remove-{{ related_name }}"
+                                    class="btn btn-danger py-1"
+                                >
+                                    <i class="fa-solid fa-delete-left"></i>
+                                    Remove
+                                </button>
+                            </form>
+
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    <!-- Pagination - note that pagination is done using htmx, -->
+    <!-- To allow scrolling through the table without a full page reload -->
+    {% if paginator.count > 0 %}
+        <div>
+            <span>
+                {% if page_obj.has_previous %}
+                    <span
+                        hx-get="{{ related_table_url }}?page=1"
+                        hx-trigger="click"
+                        hx-target="#{{ related_name }}-card"
+                        hx-swap="outerHTML"
+                        class="btn btn-secondary p-1"
+                    >
+                        <i class="fa-solid fa-angle-double-left"></i>
+                    </span>
+                    <span
+                        hx-get="{{ related_table_url }}?page={{ page_obj.previous_page_number }}"
+                        hx-trigger="click"
+                        hx-target="#{{ related_name }}-card"
+                        hx-swap="outerHTML"
+                        class="btn btn-secondary p-1"
+                    >
+                        <i class="fa-solid fa-angle-left"></i>
+                    </span>
+                {% endif %}
+                <span>
+                    <b>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</b>
+                </span>
+                {% if page_obj.has_next %}
+                    <a
+                        hx-get="{{ related_table_url }}?page={{ page_obj.next_page_number }}"
+                        hx-trigger="click"
+                        hx-target="#{{ related_name }}-card"
+                        hx-swap="outerHTML"
+                        class="btn btn-secondary p-1"
+                    >
+                        <i class="fa-solid fa-angle-right"></i>
+                    </a>
+                    <a
+                        hx-get="{{ related_table_url }}?page={{ page_obj.paginator.num_pages }}"
+                        hx-trigger="click"
+                        hx-target="#{{ related_name }}-card"
+                        hx-swap="outerHTML"
+                        class="btn btn-secondary p-1"
+                    >
+                        <i class="fa-solid fa-angle-double-right"></i>
+                    </a>
+                {% endif %}
+            </span>
+          </div>
+    {% endif %}
+
+    </div>
+</div>

@@ -1,0 +1,118 @@
+name: Deployment to production
+
+on:
+  workflow_run:
+    workflows: [Continuous integration]
+    # Build & deploy will only be triggered after all the tests have passed ...
+    types:
+      - completed
+    # ... and when we are running tests on main (i.e. after merging a PR)
+    branches:
+      - main
+
+env:
+  APP_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/tts_app
+  NGINX_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/tts_nginx
+
+jobs:
+
+  build:
+    # Build the docker images and push them to docker hub
+    name: Build Docker images
+    runs-on: ubuntu-20.04
+    # Only run build (and therefore deploy) if we have just merged into main
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v1
+      - name: Add environment variables to .env
+        run: |
+          echo DEBUG=0 >> .env
+          echo DATABASE=postgres >> .env
+          echo SECRET_KEY="${{ secrets.SECRET_KEY }}" >> .env
+          echo POSTGRES_NAME=${{ secrets.POSTGRES_NAME }} >> .env
+          echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> .env
+          echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> .env
+          echo POSTGRES_HOST=${{ secrets.POSTGRES_HOST }} >> .env
+          echo POSTGRES_PORT=${{ secrets.POSTGRES_PORT }} >> .env
+          echo VIRTUAL_HOST=timetable-solutions.com >> .env
+          echo VIRTUAL_PORT=8000 >> .env
+          echo LETSENCRYPT_HOST=timetable-solutions.com >> .env
+          echo DEFAULT_EMAIL=edward.e.j.wilson@gmail.com >> .env
+          echo NGINX_PROXY_CONTAINER=nginx-proxy >> .env
+      - name: Set environment variables
+        run: |
+          echo "APP_IMAGE=$(echo ${{env.APP_IMAGE}})" >> $GITHUB_ENV
+          echo "NGINX_IMAGE=$(echo ${{env.NGINX_IMAGE}})" >> $GITHUB_ENV
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Pull docker images
+        run: |
+          docker pull ${{ env.APP_IMAGE }} || true
+          docker pull ${{ env.NGINX_IMAGE }} || true
+      - name: Build docker images
+        run: |
+          docker-compose -f docker-compose.prod.yml build
+      - name: Push docker images
+        run: |
+          docker push ${{ env.APP_IMAGE }}
+          docker push ${{ env.NGINX_IMAGE }}
+
+  deploy:
+    # SSH into the remote server, pull the images from dockerhub and spin up some containers from them
+    name: Deploy to DigitalOcean
+    runs-on: ubuntu-20.04
+    needs: build
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v1
+      - name: Add environment variables to .env
+        # For the django settings modules, we need to export all relevant secrets as environment variables
+        # We also require other variables (e.g. dockerhub credentials) for ease of use in the remote server
+        run: |
+          echo DEBUG=0 >> .env
+          echo DATABASE=postgres >> .env
+          echo SECRET_KEY="${{ secrets.SECRET_KEY }}" >> .env
+          echo POSTGRES_NAME=${{ secrets.POSTGRES_NAME }} >> .env
+          echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> .env
+          echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> .env
+          echo POSTGRES_HOST=${{ secrets.POSTGRES_HOST }} >> .env
+          echo POSTGRES_PORT=${{ secrets.POSTGRES_PORT }} >> .env
+          echo VIRTUAL_HOST="timetable-solutions.com" >> .env
+          echo VIRTUAL_PORT=8000 >> .env
+          echo LETSENCRYPT_HOST="timetable-solutions.com" >> .env
+          echo DEFAULT_EMAIL=edward.e.j.wilson@gmail.com >> .env
+          echo NGINX_PROXY_CONTAINER=nginx-proxy >> .env
+          echo DIGITAL_OCEAN_IP_ADDRESS=${{ secrets.DIGITAL_OCEAN_IP_ADDRESS }} >> .env
+          echo APP_IMAGE=${{ env.APP_IMAGE }} >> .env
+          echo NGINX_IMAGE=${{ env.NGINX_IMAGE }} >> .env
+          echo DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} >>.env
+          echo DOCKERHUB_TOKEN=${{ secrets.DOCKERHUB_TOKEN }} >>.env
+      - name: Add private SSH key to the ssh-agent
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+          # Adding the private key to the ssh agent allows us to ssh into the remote server below
+        run: |
+          mkdir -p ~/.ssh
+          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"
+      - name: Build and deploy images inside Digital Ocean droplet
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        # We SSH into the remote server, copy over the /env file and docker-compose file,
+        # Pull the docker images from dockerhub (thanks to the 'build' job), and use these to spin up the containers
+        # Note that the dockerhub login seems to need its own command, otherwise it bugs
+        # Include the --no-build flag to ensure the 'deploy' phase uses the pulled containers
+        run: |
+          scp -o StrictHostKeyChecking=no -r ./.env ./docker-compose.prod.yml root@${{ secrets.DIGITAL_OCEAN_IP_ADDRESS }}:/app
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITAL_OCEAN_IP_ADDRESS }} docker login -u ${{ secrets.DOCKERHUB_USERNAME}} --password-stdin
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.DIGITAL_OCEAN_IP_ADDRESS}} << 'ENDSSH'
+          cd /app
+          source .env
+          docker pull $APP_IMAGE
+          docker pull $NGINX_IMAGE
+          docker-compose -f docker-compose.prod.yml up -d --no-build
+          ENDSSH

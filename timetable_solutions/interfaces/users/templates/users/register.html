@@ -1,0 +1,14 @@
+{% extends "login-registration-base.html" %}
+
+{% block title %} Register - {{ block.super }} {% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <div class="card-body">
+        {% url 'login' as login_url %}
+        {% include 'utils/forms/basic-form.html' with form=form form_id="register-form" submit_text="Register" submit_icon="fa-solid fa-address-card" other_button_url=login_url other_button_text="Back" other_button_icon="fa-solid fa-lock" %}
+    </div>
+</div>
+
+{% endblock %}

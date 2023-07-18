@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">
+        {{ model_name_plural }}
+    </li>
+{% endblock %}
+
+{% block content %}
+<div>
+
+    <div class="row mx-3 my-3 gy-2">
+
+        <div>
+            <h2>Add data</h2>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100 p-3">
+                <div class="card-title">
+                    <h3>Bulk upload {{ model_name_plural }}</h3>
+                </div>
+                <div class="card-content d-flex flex-column justify-content-between h-100">
+                    <p>
+                        Upload a file containing all or some of your {{ model_name_plural }}
+                    </p>
+                    {% if cannot_add_data_reason %}
+                        <div class="alert alert-warning" role="alert">
+                            {{ cannot_add_data_reason }}
+                        </div>
+                    {% else %}
+                        <a class="btn btn-primary w-25" href="{{ upload_url }}">
+                            <i class="fa-solid fa-cloud-upload"></i>
+                            Upload
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row mx-3 my-3 gy-2">
+        <div class="col-lg-6">
+            <div class="card h-100 p-3">
+                <div class="card-title">
+                    <h3>Add single {{ model_name_singular }}</h3>
+                </div>
+                <div class="card-content d-flex flex-column justify-content-between h-100">
+                    <p>
+                        Add data for a single {{ model_name_singular }} to your school
+                    </p>
+                    {% if cannot_add_data_reason %}
+                        <div class="alert alert-warning" role="alert">
+                            {{ cannot_add_data_reason }}
+                        </div>
+                    {% else %}
+                        <a class="btn btn-primary w-25" href="{{ create_url }}">
+                            <i class="fa-solid fa-plus-circle"></i>
+                            Add
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mx-3 my-3 gy-2">
+
+        <div>
+            <h2>Manage data</h2>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100 p-3">
+                <div class="card-title">
+                    <h3>View {{ model_name_plural }}</h3>
+                </div>
+                <div class="card-content d-flex flex-column justify-content-between h-100">
+                    <p>
+                        View details of all the {{ model_name_plural }} at your school.
+                        You can also update all existing data
+                    </p>
+
+                    {% if has_existing_data %}
+                        <a class="btn btn-primary w-25"  href="{{ list_url }}">
+                            <i class="fa-solid fa-eye"></i>
+                            View
+                        </a>
+                    {% else %}
+                        <div id="no-data-alert" class="alert alert-warning" role="alert">
+                            No data to view
+                        </div>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
